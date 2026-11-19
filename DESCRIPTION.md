@@ -6,7 +6,7 @@
 
 ## ✨ Tentang Proyek
 
-**SponsorQu** adalah aplikasi web yang dirancang untuk menyederhanakan proses pencarian dan penghubungan sponsor bagi panitia event. Dengan menggabungkan kecerdasan buatan (AI), katalog sponsor terkurasi (102 perusahaan), dan integrasi Gmail, SponsorQu memungkinkan panitia untuk:
+**SponsorQu** adalah aplikasi web yang dirancang untuk menyederhanakan proses pencarian dan penghubungan sponsor bagi panitia event. Dengan menggabungkan kecerdasan buatan (AI), vector database sponsor, dan integrasi Gmail, SponsorQu memungkinkan panitia untuk:
 
 - Menemukan calon sponsor yang relevan hanya dengan mendeskripsikan event mereka
 - Mendapatkan rekomendasi sponsor berperingkat berdasarkan skor relevansi
@@ -60,7 +60,7 @@ SponsorQu dibangun dengan visi jangka panjang melampaui tools sederhana.
 Fokus pada alur inti: **Cari sponsor → Draft email → Kirim → Pantau**. Target pengguna awal adalah panitia event mahasiswa dan komunitas kecil yang paling merasakan pain point ini. Model monetisasi dimulai dari tier Starter gratis untuk membangun basis pengguna.
 
 ### Fase 2 - Pertumbuhan
-- **Ekspansi database sponsor**: Memperluas katalog sponsor ke ratusan hingga ribuan perusahaan dari berbagai industri
+- **Ekspansi database sponsor**: Memperluas vector database ke ratusan hingga ribuan perusahaan dari berbagai industri
 - **Kolaborasi tim**: Fitur multi-user agar seluruh divisi sponsorship bisa bekerja dalam satu workspace
 - **Template library**: Koleksi template email per industri (FMCG, Fintech, Telko, F&B) yang sudah terbukti efektif
 - **Analytics lanjutan**: Conversion rate per industri, waktu respons rata-rata, dan benchmark antar event
@@ -85,7 +85,7 @@ Fokus pada alur inti: **Cari sponsor → Draft email → Kirim → Pantau**. Tar
 ## 🎯 Fitur Utama
 
 ### 1. 🔍 Cari Sponsor (AI-Powered)
-Panitia cukup mengisi tiga informasi dasar jenis event, perkiraan peserta, dan catatan singkat. AI kemudian mencocokkan deskripsi event dengan katalog sponsor terkurasi dan merekomendasikan **maksimal 5 calon sponsor** yang paling relevan, lengkap dengan:
+Panitia cukup mengisi tiga informasi dasar jenis event, perkiraan peserta, dan catatan singkat. AI kemudian melakukan pencarian ke vector database sponsor dan merekomendasikan **maksimal 5 calon sponsor** yang paling relevan, lengkap dengan:
 - **Match Score** (0–100) dan Tingkat Relevansi
 - Alasan relevansi berbasis data nyata
 - Informasi kontak dan website
@@ -188,14 +188,14 @@ SponsorQu tersedia dalam tiga tier, semua memakai alur AI yang sama tanpa kartu 
                          │ REST API
 ┌────────────────────────▼────────────────────────────────┐
 │              Express Backend ,  Port :5000             │
-│   /api/health  /api/ai/*  /api/composio/*               │
-│   /api/send-email  /api/check-replies                   │
+│   /api/health  /api/composio/*  /api/send-email         │
+│   /api/check-replies                                    │
 └────────┬───────────────────────────────┬────────────────┘
-         │ LLM API                       │ Composio API
+         │ Langflow API                  │ Composio API
 ┌────────▼─────────┐           ┌─────────▼───────────────┐
-│  LLM Provider    │           │  Gmail via Composio     │
-│  Search + Draft  │           │  (OAuth Managed Auth)   │
-│  (tanpa Langflow)│           └─────────────────────────┘
+│  Langflow :7860  │           │  Gmail via Composio     │
+│  Flow Search     │           │  (OAuth Managed Auth)   │
+│  Flow Draft      │           └─────────────────────────┘
 └──────────────────┘
 ```
 
@@ -203,8 +203,8 @@ SponsorQu tersedia dalam tiga tier, semua memakai alur AI yang sama tanpa kartu 
 |---|---|
 | Frontend | React 19, React Router 7, Vite 6 |
 | Backend | Express 4, Node.js |
-| AI Orchestration | LLM langsung dari backend (tanpa Langflow) |
-| Sumber Data Sponsor | `server/data/sponsors.json` (102 sponsor terkurasi) |
+| AI Orchestration | Langflow (self-hosted) |
+| Vector Database | Astra DB (via Langflow) |
 | Email Integration | Composio + Gmail OAuth |
 | Styling | Vanilla CSS + CSS Variables |
 
@@ -234,15 +234,12 @@ SponsorQu/
 │   └── lib/
 │       ├── constants.js         # Enums & batas sistem
 │       ├── validators.js        # Validasi form
-│       ├── ai.js                # Client AI backend (/api/ai/run)
+│       ├── langflow.js          # Langflow API client
 │       ├── merge.js             # Placeholder merger
 │       └── analytics.js        # Kalkulasi statistik
 ├── server/
-│   ├── index.js                 # Express server, static dist/ & SPA fallback
-│   ├── composio.js              # Composio client
-│   ├── data/sponsors.json       # Katalog 102 sponsor
-│   ├── prompts/                 # Prompt search & draft
-│   └── lib/                     # llm, catalog, search, draft, json
+│   ├── index.js                 # Express server & endpoints
+│   └── composio.js              # Composio client
 ├── .env.example                 # Template environment variables
 ├── vite.config.js
 └── package.json
@@ -253,8 +250,8 @@ SponsorQu/
 ## 🚀 Cara Menjalankan
 
 ### Prasyarat
-- Node.js >= 20
-- Akses ke LLM OpenAI-compatible (lokal via 9router, OpenAI, Gemini, atau Ollama)
+- Node.js >= 18
+- Langflow berjalan di `localhost:7860`
 - Akun Composio dengan project API key
 
 ### 1. Clone & Install Dependensi
@@ -272,20 +269,22 @@ npm --prefix server install
 Salin file `.env.example` menjadi `.env`, lalu isi nilainya:
 
 ```ini
-# LLM (OpenAI-compatible; contoh: 9router lokal)
-LLM_PROVIDER=openai
-LLM_BASE_URL=http://localhost:20128/v1
-LLM_MODEL=<model-yang-tersedia-di-provider>
-LLM_API_KEY=<key-jika-diperlukan>
+# URL Langflow (biasanya localhost)
+VITE_LANGFLOW_URL=http://localhost:7860
+VITE_LANGFLOW_API_KEY=<api-key-dari-langflow>
 
-# Backend Express
-VITE_BACKEND_URL=http://localhost:5000
+# Flow IDs (dari Langflow UI -> Flow Settings)
+VITE_LANGFLOW_SEARCH_FLOW_ID=<flow-id-pencarian>
+VITE_LANGFLOW_DRAFT_FLOW_ID=<flow-id-draft>
+
+# URL Express backend
+VITE_COMPOSIO_BACKEND_URL=http://localhost:5000
 
 # Composio API key (server-side only -- JANGAN tambahkan VITE_)
 COMPOSIO_API_KEY=<api-key-dari-composio>
 
 # Mode debug (true | false)
-VITE_DEBUG_AI=true
+VITE_DEBUG_LANGFLOW=true
 ```
 
 > **Keamanan**: `COMPOSIO_API_KEY` tidak boleh menggunakan prefix `VITE_`, kunci ini hanya boleh ada di sisi server dan tidak pernah terekspos ke browser.
@@ -305,16 +304,16 @@ npm run dev
 ### 4. Verifikasi Health Check
 
 ```bash
-# Backend (sekaligus status AI & Composio)
-curl http://localhost:5000/api/health
-# -> {"ok":true,"ai":{"provider":"openai","configured":true,...},"catalog":{"count":102}}
+# Langflow
+curl http://localhost:7860/health
+# -> {"status":"ok"}
 
-# Katalog sponsor
-curl http://localhost:5000/api/ai/catalog
+# Backend
+curl http://localhost:5000/api/health
+# -> {"ok":true,"composioKey":true}
 ```
 
-Mode pengembangan: buka `http://localhost:5173`.
-Mode produksi satu port: `npm run build` lalu `npm start`, buka `http://localhost:5000`.
+Buka browser ke `http://localhost:5173`, aplikasi siap digunakan.
 
 ---
 
@@ -323,13 +322,13 @@ Mode produksi satu port: `npm run build` lalu `npm start`, buka `http://localhos
 ```
 [Deskripsikan Event]
         |
-[AI mencari & meranking sponsor] <-- Backend AI (/api/ai/run, flow: search)
+[AI mencari & meranking sponsor] <-- Langflow Search Flow
         |
 [Pilih Sponsor (maks. 5)]
         |
 [Isi Konteks Kampanye & Info PIC]
         |
-[AI generate template email] <-- Backend AI (/api/ai/run, flow: draft)
+[AI generate template email] <-- Langflow Draft Flow
         |
 [Review & edit draft per sponsor]
         |
@@ -342,20 +341,19 @@ Mode produksi satu port: `npm run build` lalu `npm start`, buka `http://localhos
 
 ---
 
-## 🤖 Integrasi AI
+## 🤖 Integrasi AI (Langflow)
 
-AI dipanggil langsung dari backend Express melalui adapter LLM (OpenAI-compatible, Gemini, atau Ollama). Tidak ada Langflow, Astra DB, atau Cohere.
+Aplikasi menggunakan dua Langflow flow:
 
-### Search Flow (`/api/ai/run`, `flow: "search"`)
-- Menerima deskripsi event dalam format teks 3 baris
-- Katalog 102 sponsor dikirim ke LLM (atau di-pre-filter dengan BM25 lokal pada mode `bm25`)
-- LLM hanya mengembalikan `sponsor_id`, skor relevansi, alasan, dan bentuk dukungan
-- Server mengisi nama, industri, lokasi, kontak, dan website dari `server/data/sponsors.json`
-- ID yang tidak ada di katalog dibuang, sehingga data kontak tidak bisa dihalusinasi
+### Search Flow
+- Menerima deskripsi event dalam format teks
+- Membuat query optimal untuk vector database sponsor
+- Meranking sponsor berdasarkan 5 kriteria relevansi
+- Menghasilkan dua output (prose + JSON), aplikasi mem-parse keduanya secara defensif dan mengambil kandidat JSON yang valid
 
-### Draft Flow (`/api/ai/run`, `flow: "draft"`)
+### Draft Flow
 - Menerima konteks event lengkap + data sponsor terpilih
-- Menghasilkan satu template email dengan **placeholder dalam kurung siku** (`[nama_perusahaan]`, dll.)
+- Menghasilkan satu template email dengan **placeholder dalam kurung siku** (`[Nama Perusahaan Sponsor]`, dll.)
 - Template kemudian di-*merge* secara fuzzy dengan data nyata per sponsor
 
 ---
@@ -387,7 +385,7 @@ AI dipanggil langsung dari backend Express melalui adapter LLM (OpenAI-compatibl
 |---|---|
 | Maksimum sponsor per kampanye | 5 |
 | Maksimum email per sesi | 10 |
-| Timeout LLM request | 60 detik (default) |
+| Timeout Langflow request | 120 detik |
 
 ---
 
@@ -398,18 +396,17 @@ npm run dev          # Jalankan frontend (Vite :5173)
 npm run server       # Jalankan backend (Express :5000)
 npm run build        # Build produksi
 npm run preview      # Preview build produksi
-npm start            # Jalankan produksi satu port (:5000)
 ```
 
 ---
 
 ## 🐛 Debug
 
-Aktifkan debug panel melalui **Setting** → Mode Debug, atau set `VITE_DEBUG_AI=true` di `.env`.
+Aktifkan debug panel melalui **Setting** → Mode Debug, atau set `VITE_DEBUG_LANGFLOW=true` di `.env`.
 
 Panel debug menampilkan:
-- Endpoint & flow yang dipanggil
-- Input yang dikirim ke backend AI
+- Endpoint & Flow ID yang dipanggil
+- Input yang dikirim ke Langflow
 - Waktu respons (ms) & HTTP status
 - Raw response lengkap (dapat disalin)
 
