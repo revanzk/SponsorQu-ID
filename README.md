@@ -1,314 +1,244 @@
 # sponsorQu
 
-> Platform pencari sponsor event berbasis AI untuk panitia: deskripsikan event sekali,
-> AI merangking sponsor yang relevan, draft email otomatis terpersonalisasi per perusahaan,
-> kirim via Gmail, dan pantau balasan — dalam satu alur tanpa ketik ulang.
-
-Dokumen ini ditulis untuk **juri/evaluator**: berisi cara menjalankan aplikasi dari nol
-dan daftar lengkap fungsionalitas yang bisa diuji.
-
----
+Platform pencari sponsor untuk panitia event. Deskripsikan event Anda sekali, lalu sponsorQu merangking perusahaan yang relevan, membuat draf email yang dipersonalisasi untuk tiap perusahaan, mengirimkannya lewat Gmail, dan membantu memantau balasan, semuanya dalam satu alur.
 
 ## Daftar Isi
 
-- [Paket Harga](#paket-harga)
-- [Yang Bisa Dilakukan](#yang-bisa-dilakukan)
-- [Prasyarat](#prasyarat)
-- [Cara Menjalankan](#cara-menjalankan)
-- [Environment Variables](#environment-variables)
-- [Scripts npm](#scripts-npm)
+- [Fitur](#fitur)
+- [Cara Kerja](#cara-kerja)
+- [Paket](#paket)
+- [Tech Stack](#tech-stack)
+- [Memulai](#memulai)
+- [Konfigurasi](#konfigurasi)
+- [Halaman Aplikasi](#halaman-aplikasi)
+- [Batas Sistem](#batas-sistem)
 - [Struktur Proyek](#struktur-proyek)
-- [Demo Script 7 Menit](#demo-script-7-menit)
-- [Stack Teknologi](#stack-teknologi)
-- [Batas Sistem & Enum](#batas-sistem--enum)
 - [Troubleshooting](#troubleshooting)
 - [Keamanan](#keamanan)
-- [Dokumen Internal](#dokumen-internal)
 
----
+## Fitur
 
-## Paket Harga
+- **Rekomendasi sponsor berbasis AI.** Pencarian vektor atas dataset sponsor, dengan skor relevansi 0–100, alasan, dan bentuk dukungan yang mungkin diberikan.
+- **Draf email terpersonalisasi.** Satu panggilan AI per kampanye, lalu digabungkan ke tiap sponsor dengan nama, tanda tangan, dan detail event Anda.
+- **Pengiriman via Gmail.** Terhubung lewat OAuth, dengan pemeriksaan sebelum kirim, antrean, dan percobaan ulang per penerima.
+- **Pelacakan hasil.** Pantau status tiap sponsor (Terkirim, Dibalas, Diterima, Ditolak, Diacuhkan) dan cek balasan langsung dari aplikasi.
+- **Input manual.** Tambahkan sponsor yang sudah Anda kenal tanpa harus melalui pencarian AI.
+- **Data tetap tersimpan.** Seluruh state disimpan di `localStorage`, sehingga refresh halaman tidak menghapus pekerjaan Anda.
 
-| Tier | Harga | Isi |
-|---|---|---|
-| **Starter** | Rp0 (free tier) | 3–5 sponsor per pencarian, 3x pencarian/hari, draft + email otomatis, kirim maks 5 email/sesi, monitoring 10 sponsor |
-| **Elevate** | Rp49.000/bulan | 10+ sponsor per pencarian, limit 2–3x lipat Starter, kirim 20 email/sesi, monitoring 50 sponsor, notifikasi langsung |
-| **Executive** | Hubungi kami | Semua fitur Elevate + SSO, dukungan prioritas, pendampingan mencari sponsor, onboarding & template khusus |
+## Cara Kerja
 
----
+1. **Cari.** Pilih jenis event dan tulis deskripsinya (minimal 30 karakter). AI mengembalikan hingga 5 sponsor yang paling relevan.
+2. **Lengkapi kampanye.** Isi detail event, kebutuhan sponsorship, nada email, dan data PIC. Konteks dari langkah 1 terbawa otomatis.
+3. **Tinjau draf.** Periksa dan edit draf tiap sponsor. Placeholder yang belum terisi ditandai dan memblokir pengiriman sampai dilengkapi.
+4. **Kirim dan pantau.** Kirim lewat Gmail, lalu lacak balasan dan hasilnya di dashboard dan riwayat.
 
-## Yang Bisa Dilakukan
+## Paket
 
-### Halaman & Rute
+| | Starter | Elevate | Executive |
+|---|---|---|---|
+| Harga | Gratis | Rp49.000/bulan | Hubungi kami |
+| Sponsor per pencarian | 3–5 | 10+ | 10+ |
+| Pencarian per hari | 3 | 2–3x lipat Starter | Menyesuaikan |
+| Email per sesi kirim | 5 | 20 | 20+ |
+| Sponsor yang dipantau | 10 | 50 | Menyesuaikan |
+| Tambahan | | Notifikasi langsung | SSO, dukungan prioritas, pendampingan, template khusus |
 
-| Rute | Halaman | Fungsi — apa yang bisa dilakukan juri |
-|---|---|---|
-| `/` | Landing page publik | Lihat hero + mock hasil AI, marquee industri, 4 fitur, 4 langkah cara kerja, demo tab interaktif (Hasil AI / Draft Email / Antrean), statistik, harga, FAQ, CTA ke aplikasi |
-| `/app` | Dashboard | Lihat 4 kotak outcome (Terkirim, Dibalas, Diterima, Ditolak), grafik pengiriman per tanggal (7/14/30 hari), donut distribusi status, corong konversi, 5 aktivitas terbaru, status antrean, daftar terkirim dengan tombol outcome + info balasan, tombol global Cek Balasan |
-| `/app/cari-sponsor` | Cari Sponsor (3 langkah satu halaman) | **1)** Isi form pencarian (jenis event + catatan event, min 30 karakter) lalu Cari — AI merangking **maks 5 sponsor** dengan skor 0–100, level relevansi, alasan, bentuk dukungan; filter level, sortir, toggle Kartu/Daftar; centang sponsor. **2)** Isi Detail Kampanye (12 field: nama/tanggal/lokasi/penyelenggara event, kebutuhan sponsorship, tone email, info tambahan, nama/jabatan/kontak/email PIC, website acara, link proposal) — konteks event terbawa otomatis. **3)** Generate Draft Email |
-| `/app/cari-sponsor/draft` | Draft & Kirim | Lihat tab draft per sponsor; kolom `To` selalu bisa diedit; placeholder `[kurung]` yang belum terisi ditandai kuning dan **memblokir tombol kirim**; Merge Ulang (tanpa AI) vs Generate Ulang (AI, perlu konfirmasi); hubungkan Gmail via OAuth; pre-send check (jumlah, penerima, warning >10); antrean `Queued → Sending → Sent/Failed` + retry per item; riwayat terisi otomatis |
-| `/app/tambah-sponsor` | Tambah Sponsor manual | Tambah sponsor yang sudah dikenal lewat baris bulk (nama + email, tambah/hapus baris, error per baris, **tolak duplikat** case-insensitive); sponsor manual tampil dengan badge `Manual` dan skor `–/100`; otomatis terpilih |
-| `/app/riwayat` | Riwayat | Lihat 4 kotak outcome, filter 6 status hubungan + Semua, tabel (Sponsor/Event/Draft/Delivery/Relationship/Aksi/Updated), ubah outcome per baris (Dibalas/Diterima/Ditolak/Diacuhkan), Cek Balasan per baris & global, snippet balasan |
-| `/app/setting` | Pengaturan | Lihat status live Langflow (`:7860`) & backend (`:5000`), atur mode debug panel (env/selalu/sembunyi), lihat batas sistem, reset alur (riwayat tetap) atau reset semua |
+## Tech Stack
 
-### Aturan main yang dijaga aplikasi
-
-- Rekomendasi AI **maks 5 sponsor**; tidak ada data yang dikarang — field kosong disembunyikan (dukungan kosong → *tidak diketahui*).
-- Email hanya terkirim bila `To` terisi **dan** tidak ada placeholder tersisa (`leftover` memblokir kirim).
-- Maks **10 email per sesi** — diperingatkan, tidak pernah dipotong diam-diam.
-- Status pengiriman `Sent` hanya setelah provider Gmail sukses; retry per penerima.
-- Semua state tersimpan di `localStorage` — **refresh tidak menghilangkan data**.
-
----
-
-## Prasyarat
-
-| Kebutuhan | Keterangan |
+| Lapisan | Teknologi |
 |---|---|
-| Node.js 20+ dan npm | Terverifikasi di Node v24 / npm v11 |
-| **Langflow lokal di `:7860`** | Wajib untuk alur AI (cari sponsor + draft email). Lihat [Cara Menjalankan](#cara-menjalankan) langkah 2 |
-| Akun Composio (opsional) | Hanya dibutuhkan untuk **mengirim email asli** via Gmail. Tanpa ini, juri tetap bisa menguji Cari → Kampanye → Draft sampai pre-send check |
+| Frontend | React 19, React Router 7, Vite 6, CSS murni |
+| Backend | Express 4, cors, dotenv |
+| AI | Langflow (lokal) dengan Astra DB sebagai vector store |
+| Email | Composio (`@composio/core`) + Gmail OAuth |
 
----
+## Memulai
 
-## Cara Menjalankan
+### Prasyarat
 
-Jalankan perintah dari folder root repo.
+- Node.js 20 atau lebih baru dan npm
+- [Langflow](https://github.com/langflow-ai/langflow) yang berjalan di `http://localhost:7860`
+- Akun [Composio](https://composio.dev) (opsional, hanya untuk mengirim email asli)
 
-### 1. Clone & install dependensi
+Tanpa Composio, Anda tetap bisa memakai seluruh alur sampai tahap pemeriksaan sebelum kirim.
+
+### 1. Clone dan install
 
 ```bash
 git clone https://github.com/revanzk/sponsorQU.git
 cd sponsorQU
 
-# Install frontend
-npm install
-
-# Install backend (Express)
-npm run server:install
+npm install              # frontend
+npm run server:install   # backend
 ```
 
-### 2. Siapkan Langflow (wajib untuk alur AI)
+### 2. Siapkan Langflow
 
-Aplikasi memanggil **2 flow** di Langflow lokal (`http://localhost:7860`)
-plus **1 file dataset sponsor** yang harus dimasukkan ke vector database:
+Aplikasi memakai dua flow dan satu dataset yang ada di folder `langflow/`:
 
-| Jenis | File | Fungsi |
-|---|---|---|
-| Search flow | `langflow/SponsorQu Flow.json` | Query planner + vector search + ranker + JSON parser → rekomendasi sponsor |
-| Draft flow | `langflow/draft email.json` | Merapikan template menjadi draft `Subjek:` + `Isi:` dengan placeholder `[kurung]` |
-| Dataset sponsor | `langflow/sponsor_database_audited_final.txt` | Daftar sponsor (array JSON: nama, industri, lokasi, audiens, kontak, dll) — dimasukkan ke Astra DB lewat cabang ingest |
+| File | Fungsi |
+|---|---|
+| `SponsorQu Flow.json` | Flow pencarian: query planner, vector search, ranker, dan parser JSON |
+| `draft email.json` | Flow draf: merapikan template menjadi `Subjek:` dan `Isi:` dengan placeholder `[kurung]` |
+| `sponsor_database_audited_final.txt` | Dataset sponsor (array JSON) yang dimasukkan ke Astra DB |
 
-Langkah:
+Langkah-langkahnya:
 
-```text
-1. Jalankan Langflow dan buka http://localhost:7860
-2. Import kedua file JSON di atas (drag & drop ke kanvas Langflow)
-   sehingga menjadi 2 flow terpisah: search dan draft
-3. Isi vector database sponsor (WAJIB sebelum pencarian bisa jalan):
-   a. Buka flow search, cari cabang ingest:
-      Read File -> Split Text -> Ingest Data -> Astra DB
-   b. Pada komponen Read File, arahkan ke file:
-      langflow/sponsor_database_audited_final.txt
-   c. Jalankan cabang ingest (tombol Run pada komponen Ingest Data):
-      file dibaca -> di-split -> di-embed -> masuk ke Astra DB
-   d. Tunggu status sukses, lalu verifikasi collection Astra DB sudah terisi
-4. Catat Flow ID masing-masing flow (ada di Flow Settings) — dipakai di langkah 3
-```
-
-> Tanpa 2 flow ini, pencarian dan draft akan gagal dengan pesan error + panel debug
-> terbuka otomatis. Semua halaman lain (landing, dashboard, tambah manual, riwayat,
-> pengaturan) tetap bisa dibuka.
+1. Jalankan Langflow dan buka `http://localhost:7860`.
+2. Import kedua file JSON sehingga menjadi dua flow terpisah.
+3. Isi vector database (wajib sebelum pencarian dapat berjalan):
+   1. Di flow pencarian, temukan cabang ingest: **Read File → Split Text → Ingest Data → Astra DB**.
+   2. Pada komponen **Read File**, pilih `langflow/sponsor_database_audited_final.txt`.
+   3. Jalankan komponen **Ingest Data** dan tunggu hingga berstatus sukses.
+   4. Pastikan collection di Astra DB sudah terisi.
+4. Catat **Flow ID** masing-masing flow (tersedia di Flow Settings).
 
 ### 3. Buat file `.env`
 
 ```bash
-# Windows (PowerShell)
-Copy-Item .env.example .env
-
 # macOS / Linux
 cp .env.example .env
+
+# Windows (PowerShell)
+Copy-Item .env.example .env
 ```
 
-Lalu isi minimal 4 nilai ini di `.env` (lihat tabel [Environment Variables](#environment-variables)):
+Isi minimal nilai berikut:
 
 ```ini
 VITE_LANGFLOW_URL=http://localhost:7860
-VITE_LANGFLOW_API_KEY=<api-key-langflow-kamu>
+VITE_LANGFLOW_API_KEY=<api-key-langflow>
 VITE_LANGFLOW_SEARCH_FLOW_ID=<flow-id-search>
 VITE_LANGFLOW_DRAFT_FLOW_ID=<flow-id-draft>
 ```
 
-> **Penting:** setelah membuat/mengubah `.env`, **restart** `npm run dev`
-> karena Vite menanam variabel `VITE_*` sekali saat start.
+Untuk mengirim email asli, tambahkan juga `COMPOSIO_API_KEY`. Daftar lengkap ada di bagian [Konfigurasi](#konfigurasi).
 
-### 4. Jalankan aplikasi (2 terminal)
+### 4. Jalankan aplikasi
+
+Gunakan dua terminal:
 
 ```bash
-# Terminal 1 — backend Express (:5000)
+# Terminal 1: backend (:5000)
 npm run server
 
-# Terminal 2 — frontend Vite (:5173)
+# Terminal 2: frontend (:5173)
 npm run dev
 ```
 
-### 5. Verifikasi health check
+### 5. Verifikasi
 
 ```bash
-# Langflow — harus {"status":"ok"}
-curl http://localhost:7860/health
-
-# Backend — harus {"ok":true,"composioKey":true,...}
-curl http://localhost:5000/api/health
+curl http://localhost:7860/health      # {"status":"ok"}
+curl http://localhost:5000/api/health  # {"ok":true,"composioKey":true,...}
 ```
 
-`composioKey: true` berarti `COMPOSIO_API_KEY` terdeteksi (wajib untuk kirim email asli).
+`composioKey: true` berarti `COMPOSIO_API_KEY` terdeteksi.
 
-### 6. Buka aplikasi
+Buka aplikasi di **http://localhost:5173**. Gunakan `localhost`, bukan `127.0.0.1` atau IP LAN, karena backend hanya mengizinkan origin `localhost` (CORS).
 
-```text
-http://localhost:5173
-```
+## Konfigurasi
 
-> Selalu buka lewat `localhost:5173` (bukan `127.0.0.1` atau IP LAN) —
-> backend hanya mengizinkan origin `localhost` (CORS).
+Variabel berawalan `VITE_` dibaca frontend dan tertanam saat build, jadi **restart `npm run dev`** setiap kali `.env` diubah.
 
----
-
-## Environment Variables
-
-| Nama | Dibaca oleh | Wajib? | Contoh / Keterangan |
+| Variabel | Dibaca oleh | Wajib | Keterangan |
 |---|---|---|---|
-| `VITE_LANGFLOW_URL` | Frontend | Ya | `http://localhost:7860` |
-| `VITE_LANGFLOW_API_KEY` | Frontend | Jika flow butuh `x-api-key` | Diambil dari Settings Langflow |
-| `VITE_LANGFLOW_SEARCH_FLOW_ID` | Frontend | Ya | Dari Flow Settings flow search |
-| `VITE_LANGFLOW_DRAFT_FLOW_ID` | Frontend | Ya | Dari Flow Settings flow draft |
-| `VITE_LANGFLOW_FLOW_ID` | Frontend | Tidak | Legacy, fallback bila search ID kosong |
-| `VITE_DEBUG_LANGFLOW` | Frontend | Tidak | `true` = debug panel ikut tampil |
-| `VITE_COMPOSIO_BACKEND_URL` | Frontend | Ya (default `http://localhost:5000`) | Tanpa slash di akhir |
-| `VITE_COMPOSIO_API_KEY` | Frontend | Tidak | Hanya indikator, bukan untuk kirim |
-| `COMPOSIO_API_KEY` | Backend saja | Ya, untuk kirim email | **Tanpa prefix `VITE_`** — jangan taruh di frontend |
-| `COMPOSIO_GMAIL_AUTH_CONFIG_ID` | Backend saja | Tidak (default `ac_Im0mILtarfgb`) | Dari dashboard Composio → Auth Configs → Gmail |
-| `COMPOSIO_GMAIL_VERSION` | Backend saja | Tidak (default `20260915_00`) | Pin versi toolkit Gmail |
-| `COMPOSIO_PORT` | Backend saja | Tidak (default `5000`) | Port Express |
+| `VITE_LANGFLOW_URL` | Frontend | Ya | URL Langflow, contoh `http://localhost:7860` |
+| `VITE_LANGFLOW_API_KEY` | Frontend | Jika flow memakai `x-api-key` | Dari Settings Langflow |
+| `VITE_LANGFLOW_SEARCH_FLOW_ID` | Frontend | Ya | Flow ID flow pencarian |
+| `VITE_LANGFLOW_DRAFT_FLOW_ID` | Frontend | Ya | Flow ID flow draf |
+| `VITE_LANGFLOW_FLOW_ID` | Frontend | Tidak | Fallback lama bila ID pencarian kosong |
+| `VITE_DEBUG_LANGFLOW` | Frontend | Tidak | `true` menampilkan panel debug |
+| `VITE_COMPOSIO_BACKEND_URL` | Frontend | Tidak | Default `http://localhost:5000`, tanpa slash di akhir |
+| `COMPOSIO_API_KEY` | Backend | Untuk kirim email | Tanpa prefix `VITE_`; jangan diletakkan di frontend |
+| `COMPOSIO_GMAIL_AUTH_CONFIG_ID` | Backend | Tidak | Dari Composio → Auth Configs → Gmail |
+| `COMPOSIO_GMAIL_VERSION` | Backend | Tidak | Menetapkan versi toolkit Gmail |
+| `COMPOSIO_PORT` | Backend | Tidak | Default `5000` |
 
----
+### Script npm
 
-## Scripts npm
-
-| Command | Fungsi |
+| Perintah | Fungsi |
 |---|---|
-| `npm run dev` | Jalankan frontend Vite di `:5173` |
-| `npm run server` | Jalankan backend Express di `:5000` |
-| `npm run server:install` | Install dependensi backend (`server/`) |
-| `npm run build` | Build produksi (harus hijau) |
-| `npm run preview` | Preview hasil build produksi |
+| `npm run dev` | Menjalankan frontend (Vite) di `:5173` |
+| `npm run server` | Menjalankan backend (Express) di `:5000` |
+| `npm run server:install` | Menginstal dependensi backend |
+| `npm run build` | Build produksi |
+| `npm run preview` | Pratinjau hasil build |
 
----
+## Halaman Aplikasi
+
+| Rute | Halaman | Fungsi |
+|---|---|---|
+| `/` | Landing | Pengenalan produk, cara kerja, harga, dan FAQ |
+| `/app` | Dashboard | Ringkasan hasil, grafik pengiriman, corong konversi, aktivitas terbaru, dan status antrean |
+| `/app/cari-sponsor` | Cari Sponsor | Pencarian AI, pemilihan sponsor, dan pengisian detail kampanye |
+| `/app/cari-sponsor/draft` | Draf dan Kirim | Edit draf, hubungkan Gmail, pemeriksaan sebelum kirim, dan antrean pengiriman |
+| `/app/tambah-sponsor` | Tambah Sponsor | Input sponsor manual secara massal, dengan penolakan duplikat |
+| `/app/riwayat` | Riwayat | Filter status, ubah hasil per sponsor, dan cek balasan |
+| `/app/setting` | Pengaturan | Status Langflow dan backend, mode debug, serta reset data |
+
+## Batas Sistem
+
+| Aturan | Nilai |
+|---|---|
+| Sponsor per pencarian AI | Maksimal 5 |
+| Email per sesi kirim | Maksimal 10 (pengguna diperingatkan, tidak dipotong diam-diam) |
+| Timeout request Langflow | 120 detik |
+| `input_type` Langflow | Selalu `"chat"` |
+| Format draf | Baris `Subjek:` dan `Isi:`, dengan placeholder `[kurung]` |
+
+Beberapa aturan yang dijaga aplikasi:
+
+- Email hanya dikirim jika kolom `To` terisi dan tidak ada placeholder yang tersisa.
+- Status `Sent` hanya diberikan setelah Gmail mengonfirmasi pengiriman.
+- Data yang tidak tersedia tidak dikarang; field kosong disembunyikan.
+
+**Tingkat relevansi:** Sangat Relevan (80–100), Relevan (60–79), Cukup Relevan (40–59), Kurang Relevan (0–39).
+
+**Status hubungan:** Belum Dihubungi, Terkirim, Dibalas, Diterima, Ditolak, Diacuhkan.
+
+**Status pengiriman:** Queued, Sending, Sent, Failed.
 
 ## Struktur Proyek
 
 ```text
 .
-├── index.html              # Title + meta sponsorQu
-├── vite.config.js          # Vite 6, port 5173
-├── .env.example            # Template env (aman di-commit)
-├── server/
-│   ├── index.js            # Express: health, Composio OAuth, kirim email, cek balasan
-│   ├── composio.js         # Client @composio/core (API key tidak pernah keluar server)
+├── index.html
+├── vite.config.js
+├── .env.example
+├── server/                 # Backend Express
+│   ├── index.js            # Health check, OAuth Composio, kirim email, cek balasan
+│   ├── composio.js         # Client Composio (API key tidak keluar dari server)
 │   └── package.json
-├── langflow/               # Template flow + dataset (diimport ke Langflow lokal)
-│   ├── SponsorQu Flow.json # Flow search + scoring sponsor
-│   ├── draft email.json    # Flow generate draft email
-│   └── sponsor_database_audited_final.txt  # Dataset sponsor → Read File → Astra DB
+├── langflow/               # Flow dan dataset untuk diimport ke Langflow
+│   ├── SponsorQu Flow.json
+│   ├── draft email.json
+│   └── sponsor_database_audited_final.txt
 └── src/
-    ├── main.jsx            # Entry + ErrorBoundary
-    ├── App.jsx             # Router / + /app/* + guards
-    ├── index.css           # Design tokens (brand ungu #6D5AE6)
-    ├── landing/            # Landing.jsx, landing.css, useReveal.js
-    ├── components/         # Shell (sidebar+topbar), DebugPanel, charts
-    ├── dashboard/          # DashboardHome, CariSponsor, Draft, Hasil,
-    │                       # Kampanye, TambahSponsor, Riwayat, Setting
-    ├── lib/                # constants, validators, langflow, merge
-    └── store/              # store.jsx — state global + actions + localStorage
+    ├── main.jsx            # Entry point + ErrorBoundary
+    ├── App.jsx             # Router dan guard
+    ├── index.css           # Design token
+    ├── landing/            # Landing page
+    ├── components/         # Shell, panel debug, grafik
+    ├── dashboard/          # Halaman-halaman aplikasi
+    ├── lib/                # Konstanta, validator, klien Langflow, merge
+    └── store/              # State global dan persistensi localStorage
 ```
-
----
-
-## Demo Script 7 Menit
-
-| # | Klik | Ucapkan |
-|---|---|---|
-| 0 | Scroll landing `/` | "Panitia habiskan berhari-hari cari sponsor. Satu alur membereskannya." |
-| 1 | Isi event → Cari | "Satu deskripsi — tidak pernah diketik ulang." Narasikan selagi AI bekerja |
-| 2 | Hasil: skor/chip/alasan/filter/sortir/Kartu-Daftar | "Maks lima, setiap klaim ada alasannya, tidak ada yang dikarang." |
-| 3 | Pilih → isi kampanye (konteks terbawa) → PIC/link | "Konteks terbawa otomatis; data PIC mengisi tanda tangan email." |
-| 4 | Generate → tab draft | "Satu panggilan AI per kampanye, langsung di-merge per sponsor." |
-| 5 | Tunjukkan `[..]` kuning, email manual | "Yang belum terisi diberi nama dan memblokir kirim — bisa diperbaiki." |
-| 6 | Hubungkan Gmail (OAuth asli) | "OAuth asli; kredensial tidak pernah menyentuh kode kami." |
-| 7 | Pre-send → Kirim → antrean → Riwayat | "Sepuluh per sesi, status per penerima, riwayat tercatat." |
-| 8 | Kotak outcome + tombol status | "Outcome dilacak user; setiap langkah AI bisa diinspeksi." |
-
-Fallback: AI lambat → narasikan panel debug. Kirim tidak boleh jalan → berhenti setelah pre-send check.
-
----
-
-## Stack Teknologi
-
-| Lapisan | Teknologi | Versi |
-|---|---|---|
-| Build | Vite | 6 |
-| UI | React + React DOM | 19 |
-| Routing | React Router | 7 |
-| Backend | Express + cors + dotenv | 4 |
-| AI | Langflow (lokal `:7860`) | — |
-| Email | Composio `@composio/core` + Gmail OAuth | 0.22 |
-| Styling | CSS murni + design token (tanpa library UI) | — |
-
----
-
-## Batas Sistem & Enum
-
-| Aturan | Nilai |
-|---|---|
-| Maks sponsor per pencarian AI | 5 |
-| Maks email per sesi kirim | 10 (diperingatkan, tidak dipotong diam-diam) |
-| Timeout request Langflow | 120 detik |
-| `input_type` Langflow | **Selalu `"chat"`**, tidak pernah `"text"` |
-| Format draft | Baris `Subjek:` + body `Isi:` dengan placeholder `[kurung]` (tidak pernah `{{}}`) |
-| Tingkat relevansi | Sangat Relevan (80–100) / Relevan (60–79) / Cukup Relevan (40–59) / Kurang Relevan (0–39) |
-| Status hubungan | Belum Dihubungi / Terkirim / Dibalas / Diterima / Ditolak / Diacuhkan |
-| Status pengiriman | Queued / Sending / Sent / Failed |
-
----
 
 ## Troubleshooting
 
 | Gejala | Penyebab | Solusi |
 |---|---|---|
-| `Failed to fetch` / `CORS error` saat hubungkan Gmail | Backend `:5000` tidak terjangkau dari browser, atau port dipakai proses lain (`EADDRINUSE`) | Pastikan `npm run server` jalan dan banner-nya `:5000`; buka lewat `localhost:5173`; cek tab Network DevTools |
-| Output Langflow "no data" | `input_type:"text"` pada flow yang hanya punya Chat Input | Kode selalu memakai `"chat"` (`src/lib/langflow.js`) — jangan diubah |
-| Pencarian gagal / hasil kosong | Flow ID salah, Langflow mati, atau API key salah | Cek Pengaturan → status Langflow; buka panel debug untuk raw response |
-| Placeholder tidak pernah terisi | LLM mengarang frasa placeholder tiap run | Pakai tombol Merge Ulang di halaman draft |
-| `.env` diubah tapi tidak berpengaruh | Vite menanam `VITE_*` saat start | Restart `npm run dev` |
-| Layar putih setelah navigasi | Referensi router menggantung | Cek console + `ErrorBoundary` (`src/main.jsx`) |
-| Status `Sent` tidak pernah muncul | Gmail belum terhubung / backend mati | Ikuti kartu Connect di halaman draft → cek status → cek log server |
-
----
+| `Failed to fetch` atau error CORS saat menghubungkan Gmail | Backend tidak terjangkau, atau port 5000 dipakai proses lain | Pastikan `npm run server` berjalan di `:5000` dan aplikasi dibuka lewat `localhost:5173` |
+| Pencarian gagal atau hasil kosong | Flow ID salah, Langflow mati, API key salah, atau vector database belum terisi | Cek status di halaman Pengaturan, lalu buka panel debug untuk melihat respons mentah |
+| Output Langflow "no data" | `input_type` diubah menjadi `"text"` | Gunakan `"chat"` (lihat `src/lib/langflow.js`) |
+| Placeholder tidak pernah terisi | LLM menghasilkan frasa placeholder yang berbeda di tiap run | Gunakan tombol **Merge Ulang** di halaman draf |
+| Perubahan `.env` tidak berpengaruh | Variabel `VITE_*` tertanam saat start | Restart `npm run dev` |
+| Layar putih setelah navigasi | Error render yang tertangkap `ErrorBoundary` | Periksa console browser |
+| Status `Sent` tidak muncul | Gmail belum terhubung atau backend mati | Selesaikan koneksi Gmail di halaman draf, lalu cek log server |
 
 ## Keamanan
 
-- **Jangan pernah commit `.env`.** File `.gitignore` repo ini sudah mengabaikan `.env`, `node_modules/`, dan `dist/`. Yang di-commit hanya `.env.example` (berisi placeholder).
-- Bila API key pernah bocor ke publik: **putar ulang (regenerate) key** di dashboard Composio/Langflow, lalu isi ulang `.env` lokal.
-- `COMPOSIO_API_KEY` (tanpa prefix `VITE_`) hanya dibaca `server/` — tidak pernah dikirim ke browser.
-
----
-
-## Dokumen Internal
-
-Spesifikasi lengkap untuk pengembang ada di repo:
-
-- `00-START-HERE.md` — urutan build & iron rules
-- `01-CONTRACTS.md` — kontrak data, validator, enum
-- `02-APP.md` — panduan setup, shell, halaman, backend
-- `03-REFERENCE.md` — prompt Langflow verbatim, graf flow, token desain, debug playbook
+- Jangan commit file `.env`. Repo ini sudah mengabaikan `.env`, `node_modules/`, dan `dist/`; hanya `.env.example` yang di-commit.
+- `COMPOSIO_API_KEY` hanya dibaca oleh `server/` dan tidak pernah dikirim ke browser.
+- Jika sebuah API key pernah terekspos, buat ulang key tersebut di dashboard Composio atau Langflow, lalu perbarui `.env` lokal Anda.
